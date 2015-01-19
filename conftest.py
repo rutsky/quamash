@@ -28,8 +28,8 @@ def application(request):
 			continue
 
 
-@fixture(scope='session')
-def qtcore(request):
+@fixture(scope='session', autouse=True)
+def do_set_qt(request):
+	import quamash
 	qtimpl = request.config.getoption('qtimpl')
-	__import__(qtimpl)
-	return import_module('.QtCore', qtimpl)
+	quamash.set_qt(qtimpl)

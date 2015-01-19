@@ -73,14 +73,12 @@ def loop(request, application):
 @pytest.fixture(
 	params=[None, quamash.QThreadExecutor, ThreadPoolExecutor, ProcessPoolExecutor]
 )
-def executor(request, qtcore):
+def executor(request):
 	exc_cls = request.param
 	if exc_cls is None:
 		return None
-	elif exc_cls is quamash.QThreadExecutor:
-		exc = exc_cls(qtcore.QThread)
-	else:
-		exc = exc_cls(1)  # FIXME? fixed number of workers?
+
+	exc = exc_cls(1)  # FIXME? fixed number of workers?
 
 	request.addfinalizer(exc.shutdown)
 	return exc

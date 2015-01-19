@@ -6,15 +6,15 @@ import quamash
 
 
 @pytest.fixture
-def executor(request, qtcore):
-	exe = quamash.QThreadExecutor(qtcore.QThread, 5)
+def executor(request):
+	exe = quamash.QThreadExecutor(5)
 	request.addfinalizer(exe.shutdown)
 	return exe
 
 
 @pytest.fixture
-def shutdown_executor(qtcore):
-	exe = quamash.QThreadExecutor(qtcore.QThread, 5)
+def shutdown_executor():
+	exe = quamash.QThreadExecutor(5)
 	exe.shutdown()
 	return exe
 
@@ -41,8 +41,8 @@ def test_run_in_executor_without_loop(executor):
 	assert r == 4
 
 
-def test_run_in_executor_as_ctx_manager(qtcore):
-	with quamash.QThreadExecutor(qtcore.QThread) as executor:
+def test_run_in_executor_as_ctx_manager():
+	with quamash.QThreadExecutor() as executor:
 		f = executor.submit(lambda x: 2 + x, 2)
 		r = f.result()
 	assert r == 4

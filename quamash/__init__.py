@@ -13,6 +13,7 @@ import os
 import asyncio
 import time
 import itertools
+import types
 from queue import Queue
 from concurrent.futures import Future
 from importlib import import_module
@@ -22,6 +23,39 @@ from ._common import with_logger
 
 if 'QUAMASH_QTIMPL' in os.environ:
 	warnings.warn("QUAMASH_QTIMPL environment variable set, this version of quamash ignores it.")
+
+_qtcore = None
+
+
+def set_qt(qt):
+	"""
+	Tell quamash which Qt to use.
+
+	Pass in a module like
+
+	>>> import PySide
+	>>> import quamash
+	>>> quamash.set_qt(PySide)
+
+	or a string like:
+
+	>>> import quamash
+	>>> quamash.set_qt('PySide')
+
+	.. note:: getfixture('skipme') just tells py.test to skip these tests since set_qt can only be done once.
+
+	(you may use PyQt4 or PyQt5 instead of PySide)
+	"""
+	global _qtcore
+	if _qtcore is not None:
+		raise RuntimeError("set_qt must only be called once")
+	if isinstance(qt, str):
+		__import__(qt)
+		_qtcore = import_module('.QtCore', qt)
+	elif isinstance(qt, types.ModuleType):
+		_qtcore = import_module('.QtCore', qt.__name__)
+	else:
+		raise ValueError('qt must be a module or a string')
 
 
 @with_logger
@@ -81,18 +115,17 @@ class QThreadExecutor:
 	Same API as `concurrent.futures.Executor`
 
 	>>> from quamash import QThreadExecutor
-	>>> QtCore = getfixture('qtcore')
-	>>> with QThreadExecutor(QtCore.QThread, 5) as executor:
+	>>> with QThreadExecutor(5) as executor:
 	...     f = executor.submit(lambda x: 2 + x, 2)
 	...     r = f.result()
 	...     assert r == 4
 	"""
 
-	def __init__(self, qthread_class, max_workers=10):
+	def __init__(self, max_workers=10):
 		super().__init__()
-		assert isinstance(qthread_class, type)
+		global _qtcore
 
-		class QThreadWorker(_QThreadWorker, qthread_class):
+		class QThreadWorker(_QThreadWorker, _qtcore.QThread):
 			pass
 
 		self.__max_workers = max_workers
@@ -182,10 +215,16 @@ class QEventLoop(_baseclass):
 	"""
 
 	def __init__(self, app):
-		self.__timers = []
+		global _qtcore
+
+		if _qtcore is not None and app is None:
+			app = _qtcore.QCoreApplication.instance()
+
 		if app is None:
 			raise ValueError("app must be an instance of QApplication")
 		self.__app = app
+
+		self.__timers = []
 		self.__is_running = False
 		self.__debug_enabled = False
 		self.__default_executor = None
@@ -193,7 +232,10 @@ class QEventLoop(_baseclass):
 		self._read_notifiers = {}
 		self._write_notifiers = {}
 
-		qtcore = import_module('..QtCore', type(app).__module__)
+		if _qtcore is not None:
+			qtcore = _qtcore
+		else:
+			_qtcore = qtcore = import_module('..QtCore', type(app).__module__)
 
 		super().__init__(qtcore)
 
@@ -434,7 +476,7 @@ class QEventLoop(_baseclass):
 		executor = executor or self.__default_executor
 		if executor is None:
 			self._logger.debug('Creating default executor')
-			executor = self.__default_executor = QThreadExecutor(self._qtcore.QThread)
+			executor = self.__default_executor = QThreadExecutor()
 		self._logger.debug('Using default executor')
 
 		return asyncio.wrap_future(executor.submit(callback, *args))
